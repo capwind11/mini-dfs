@@ -1,11 +1,14 @@
 package client
 
 import (
-	"io/ioutil"
+	"fmt"
+	"io"
 	"net/http"
 	"net/rpc"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 const uploadPath = "./tmp"
@@ -29,42 +32,61 @@ func (c Client) RunRpcServer() {
 
 func (c *Client) Download(w http.ResponseWriter, r *http.Request) {
 
+	logger.Printf("download url=%s \n", r.URL.String())
+	fileName := r.URL.Query().Get("file")
+	if len(fileName) == 0 {
+		logger.Println("no file parameter")
+		w.Write([]byte("NO FILE PARAMETER"))
+		return
+	}
+	newPath := filepath.Join(uploadPath, fileName)
+	f, err := os.Open(newPath)
+	if err != nil {
+		logger.Println("file open failed")
+		w.Write([]byte("FILE OPEN FAILED"))
+		return
+	}
+
+	io.Copy(w, f)
+	return
 }
 
 func (c *Client) Upload(w http.ResponseWriter, r *http.Request) {
+	contentType := r.Header.Get("content-type")
+	contentLen := r.ContentLength
 
-	fileType := r.PostFormValue("type")
-	file, fileHeader, err := r.FormFile("file")
-	if err != nil {
-		renderError(w, "INVALID_FILE", http.StatusBadRequest)
-		logger.Println("INVALID_FILE", err)
+	logger.Printf("upload content-type:%s,content-length:%d", contentType, contentLen)
+	if !strings.Contains(contentType, "multipart/form-data") {
+		logger.Println("content-type must be multipart/form-data")
+		w.Write([]byte("content-type must be multipart/form-data"))
 		return
 	}
+
+	file, header, err := r.FormFile("file")
 	defer file.Close()
-	fileSize := fileHeader.Size
-	logger.Printf("File size (bytes): %v\n", fileSize)
-	fileBytes, err := ioutil.ReadAll(file)
 	if err != nil {
-		renderError(w, "INVALID_FILE", http.StatusBadRequest)
-		logger.Println("INVALID_FILE", err)
+		logger.Println("READ FILE FAILED")
+		w.Write([]byte("READ FILE FAILED"))
 		return
 	}
-	fileName := fileHeader.Filename
-	newPath := filepath.Join(uploadPath, fileName)
-	logger.Printf("FileType: %s, File: %s\n", fileType, newPath)
-	newFile, err := os.Create(newPath)
+	newPath := filepath.Join(uploadPath, header.Filename)
+	dst, err := os.Create(newPath)
 	if err != nil {
-		logger.Println("Write file failed", err)
-		renderError(w, "CANT_READ_FILE_TYPE", http.StatusInternalServerError)
+		logger.Println("CREATE FILE FAILED")
+		w.Write([]byte("CREATE FILE FAILED"))
 		return
 	}
-	defer newFile.Close()
-	_, err = newFile.Write(fileBytes)
-	if err != nil || newFile.Close() != nil {
-		renderError(w, "CANT_READ_FILE_TYPE", http.StatusInternalServerError)
-		logger.Println("Write file failed", err)
+	defer dst.Close()
+
+	_, err = io.Copy(dst, file)
+	if err != nil {
+		logger.Println("WRITE FILE FAILED")
+		w.Write([]byte("WRITE FILE FAILED"))
+		return
 	}
-	w.Write([]byte("SUCCESS"))
+	fmt.Printf("successful uploaded,fileName=%s,fileSize=%.2f MB,savePath=%s \n", header.Filename, float64(contentLen)/1024/1024, newPath)
+
+	w.Write([]byte("successful,url=" + url.QueryEscape(header.Filename)))
 }
 
 func (c Client) RunHTTPServer() {
