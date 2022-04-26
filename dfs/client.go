@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/rpc"
 	"os"
+	"path/filepath"
 )
 
 type Client struct {
@@ -50,13 +51,39 @@ func (c *Client) Close() {
 	}
 }
 
-func (c *Client) Download() {
-
+func (c *Client) Download(filename string, dst string) {
+	// 获取元数据
+	req := FileDownloadMetaRequest{
+		FileName: filename,
+	}
+	resp := &FileDownloadMetaResponse{
+		DataServerId: make([]int, 0),
+		ChunkId:      make([]int64, 0),
+	}
+	c.nameServerClient.Call("NameServer.Download", req, resp)
+	fmt.Println(resp)
+	// 根据文件元数据，下载
+	newFilepath := filepath.Join(dst, filename)
+	f, err := os.Create(newFilepath)
+	if err != nil {
+		ns_logger.Println("create file failed", err)
+		return
+	}
+	for i, chunkId := range resp.ChunkId {
+		chunkReadRequest := ChunkReadRequest{
+			ChunkId: chunkId,
+		}
+		chunkReadResponse := &ChunkReadResponse{}
+		c.dataServerClient[resp.DataServerId[i]].Call("DataServer.Download", chunkReadRequest, chunkReadResponse)
+		f.Write(chunkReadResponse.DATA)
+	}
+	return
 }
 
-func (c *Client) Upload(filePath string) error {
+func (c *Client) Upload(file string) error {
 
-	f, err := os.Open(filePath)
+	_, fileName := filepath.Split(file)
+	f, err := os.Open(file)
 	defer f.Close()
 	if err != nil {
 		msg := fmt.Sprintf("file not exist %v\n", err)
@@ -76,22 +103,33 @@ func (c *Client) Upload(filePath string) error {
 		if n == 0 {
 			break
 		}
-		req := ChunkWriteRequest{
-			ChunkId: chunkID,
+
+		fileReq := FileUploadMetaRequest{
+			FileName: fileName,
+			ChunkId:  chunkID,
+		}
+
+		fileResp := &FileUploadMetaResponse{}
+		err = c.nameServerClient.Call("NameServer.Upload", fileReq, fileResp)
+		if err != nil {
+			msg := fmt.Sprintf("meta data retreive fail %v\n", err)
+			client_logger.Println(msg)
+			return err
+		}
+		client_logger.Printf("file:%s, chunk:%d allocated to chunkId:%d dataserver:%d", fileName, fileReq.ChunkId, fileResp.ChunkId, fileResp.DataServerId)
+
+		chunkReq := ChunkWriteRequest{
+			ChunkId: fileResp.ChunkId,
 			DATA:    data[:n],
 		}
-		res := &ChunkWriteResponse{}
-		err = c.dataServerClient.Call("DataServer.Upload", req, res)
+		chunkResp := &ChunkWriteResponse{}
+		err = c.dataServerClient[fileResp.DataServerId].Call("DataServer.Upload", chunkReq, chunkResp)
 		if err != nil {
-			msg := fmt.Sprintf("upload file not fail %v\n", err)
+			msg := fmt.Sprintf("upload file fail %v\n", err)
 			client_logger.Println(msg)
 			return err
 		}
 		chunkID += 1
 	}
 	return nil
-}
-
-func (c *Client) RunClient() {
-	client_logger.Println("[run client]-----------------------------")
 }

@@ -1,4 +1,4 @@
 tmp/*
 *.jpg
-/dfs/tmp
+/data/tmp
 /data

@@ -2,6 +2,7 @@ package dfs
 
 import (
 	"fmt"
+	"math/rand"
 	"net"
 	"net/http"
 	"net/rpc"
@@ -40,21 +41,38 @@ func (s *NameServer) RunRpcServer() (net.Listener, error) {
 	return listener, http.Serve(listener, server)
 }
 
-func (s *NameServer) Upload(req FileMetaRequest, resp *FileMetaResponse) error {
+func (s *NameServer) Upload(req FileUploadMetaRequest, resp *FileUploadMetaResponse) error {
 	fileName := req.FileName
 
-	if v, ok := s.fileMetaData[fileName]; ok {
-		v = append(v, s.nextChunkId)
+	if _, ok := s.fileMetaData[fileName]; ok {
+		s.fileMetaData[fileName] = append(s.fileMetaData[fileName], s.nextChunkId)
 	} else {
 		s.fileMetaData[fileName] = []int64{s.nextChunkId}
 	}
 
-	s.chunkMetaData[s.nextChunkId] = []int{s.nextDataServer, s.nextDataServer + 1, s.nextDataServer + 2}
+	s.chunkMetaData[s.nextChunkId] = []int{s.nextDataServer, (s.nextDataServer + 1) % 4, (s.nextDataServer + 2) % 4}
 
 	resp.ChunkId = s.nextChunkId
 	resp.DataServerId = s.nextDataServer
 	resp.msg = fmt.Sprintf("file: %s, chunK: %d is allocated as chunkId: %d dataserver: %d", fileName, req.ChunkId, s.nextChunkId, s.nextDataServer)
 	s.nextDataServer = (s.nextDataServer + 1) % 4
 	s.nextChunkId += 1
+	return nil
+}
+
+func (s *NameServer) Download(req FileDownloadMetaRequest, resp *FileDownloadMetaResponse) error {
+	fileName := req.FileName
+
+	if v, ok := s.fileMetaData[fileName]; ok {
+		for _, chunkID := range v {
+			resp.ChunkId = append(resp.ChunkId, chunkID)
+			dataServerId := s.chunkMetaData[chunkID][rand.Intn(3)]
+			resp.DataServerId = append(resp.DataServerId, dataServerId)
+		}
+	} else {
+		msg := fmt.Sprintf("file %s not exist\n", req.FileName)
+		ns_logger.Printf(msg)
+		resp.msg = msg
+	}
 	return nil
 }

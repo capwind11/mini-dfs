@@ -31,23 +31,32 @@ type ChunkWriteResponse struct {
 }
 
 type ChunkReadRequest struct {
-	ChunkId string
+	ChunkId int64
 }
 
 type ChunkReadResponse struct {
-	ChunkId int64
-	DATA    []byte
-	msg     string
+	DATA []byte
+	msg  string
 }
 
-type FileMetaRequest struct {
+type FileUploadMetaRequest struct {
 	FileName string
 	ChunkId  int64
 }
 
-type FileMetaResponse struct {
+type FileUploadMetaResponse struct {
 	DataServerId int
 	ChunkId      int64
+	msg          string
+}
+
+type FileDownloadMetaRequest struct {
+	FileName string
+}
+
+type FileDownloadMetaResponse struct {
+	DataServerId []int
+	ChunkId      []int64
 	msg          string
 }
 
