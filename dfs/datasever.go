@@ -1,6 +1,8 @@
 package dfs
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
 	"mini-dfs/db"
 	"net"
@@ -46,10 +48,9 @@ func (d *DataServer) Close() {
 	}
 }
 
-func (d *DataServer) Call(peerId int, method string, req interface{}, resp interface{}) (err error) {
-	addr := d.peerAddrs[peerId]
+func (d *DataServer) Call(peerAddr string, method string, req interface{}, resp interface{}) (err error) {
 	var client *rpc.Client
-	if client, err = rpc.DialHTTP("tcp", addr); err != nil {
+	if client, err = rpc.DialHTTP("tcp", peerAddr); err != nil {
 		return err
 	}
 	defer client.Close()
@@ -72,6 +73,7 @@ func (d *DataServer) RunRpcServer() (net.Listener, error) {
 
 func (d *DataServer) Write(req ChunkWriteRequest, res *ChunkWriteResponse) error {
 	newPath := filepath.Join("./data/ds"+strconv.Itoa(d.id), "chunk"+strconv.FormatInt(req.ChunkId, 10))
+	db.InsertChunk2Node(req.ChunkId, d.addr)
 	f, err := os.Create(newPath)
 	defer f.Close()
 	if err != nil {
@@ -92,7 +94,10 @@ func (d *DataServer) Write(req ChunkWriteRequest, res *ChunkWriteResponse) error
 
 func (d *DataServer) Upload(req ChunkWriteRequest, res *ChunkWriteResponse) error {
 	md5Encode := MD5Encode(req.DATA)
-	//fmt.Println(hex.EncodeToString(md5Encode))
+	if !bytes.Equal(md5Encode, req.MD5Code) {
+		ds_logger.Printf("check chunk %d md5 fail", req.ChunkId)
+		return errors.New("check chunk md5 fail")
+	}
 	db.UpdateChunk(req.ChunkId, md5Encode)
 	err := d.Write(req, res)
 	if err != nil {
@@ -102,10 +107,10 @@ func (d *DataServer) Upload(req ChunkWriteRequest, res *ChunkWriteResponse) erro
 		return err
 	}
 	for i := 1; i < 3; i += 1 {
-		target := (d.id + i) % 4
-		chunkResp := ChunkWriteResponse{}
+		target := req.DataNodes[i]
+		chunkResp := &ChunkWriteResponse{}
 		er := d.Call(target, "DataServer.Write", req, chunkResp)
-		ds_logger.Printf("Chunk: %d is transferred to dataserver: %d\n", req.ChunkId, target)
+		ds_logger.Printf("Chunk: %d is transferred to dataserver: %s\n", req.ChunkId, target)
 		if er != nil {
 			ds_logger.Println("transferred failed", er)
 		}

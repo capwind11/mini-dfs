@@ -1,9 +1,15 @@
 package dfs
 
+type ChunkMetaData struct {
+	ChunkId       int64
+	DataNodeAddrs []string
+}
+
 type ChunkWriteRequest struct {
-	ChunkId int64
-	DATA    []byte
-	MD5Code []byte
+	ChunkId   int64
+	DATA      []byte
+	DataNodes []string
+	MD5Code   []byte
 }
 
 type ChunkWriteResponse struct {
@@ -23,13 +29,12 @@ type ChunkReadResponse struct {
 
 type FileUploadMetaRequest struct {
 	FileName string
-	ChunkId  int64
+	FileSize int64
 }
 
 type FileUploadMetaResponse struct {
-	DataServerId int
-	ChunkId      int64
-	msg          string
+	FileID    int64
+	ChunkInfo []ChunkMetaData
 }
 
 type FileDownloadMetaRequest struct {
@@ -37,9 +42,9 @@ type FileDownloadMetaRequest struct {
 }
 
 type FileDownloadMetaResponse struct {
-	DataServerId []int
-	ChunkId      []int64
-	msg          string
+	DataServerAddrs []string
+	ChunkId         []int64
+	MD5Code         []string
 }
 
 type ChunkMetaRequest struct {

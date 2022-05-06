@@ -12,24 +12,23 @@ func initDataServer(addrs []string) {
 		ds = append(ds, server)
 		go server.RunRpcServer()
 	}
-	//for _, s := range ds {
-	//	s.Connect()
-	//}
 	return
 }
 
 func main() {
 	db.InitDB()
-	nameServerAddr := "127.0.0.1:8080"
-	nameServer := dfs.NewNameServer(nameServerAddr)
-	go nameServer.RunRpcServer()
 
 	dataServerAddr := []string{"127.0.0.1:8081", "127.0.0.1:8082", "127.0.0.1:8083", "127.0.0.1:8084"}
+	nameServerAddr := "127.0.0.1:8080"
+	nameServer := dfs.NewNameServer(nameServerAddr, dataServerAddr)
+	go nameServer.RunRpcServer()
 	initDataServer(dataServerAddr)
 
 	client := dfs.NewClient(nameServerAddr, dataServerAddr)
 	client.Connect()
-	client.Upload("./data/tmp/2.pdf")
+	//client.UploadFile("./data/tmp/2.pdf")
 	client.Download("2.pdf", "./data/test")
+	//client.UploadFile("./data/tmp/4.pdf")
+	client.Download("4.pdf", "./data/test")
 	client.Close()
 }

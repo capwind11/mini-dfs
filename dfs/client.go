@@ -2,6 +2,7 @@ package dfs
 
 import (
 	"bytes"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net/rpc"
@@ -10,47 +11,47 @@ import (
 )
 
 type Client struct {
-	nameServerAddr   string
-	dataServerAddrs  []string
-	dataServerClient []*rpc.Client
-	nameServerClient *rpc.Client
+	nameNodeAddr   string
+	dataNodeAddrs  []string
+	dataNodeClient map[string]*rpc.Client
+	nameNodeClient *rpc.Client
 }
 
-func NewClient(nameServerAddr string, dataServerAddrs []string) *Client {
+func NewClient(nameNodeAddr string, dataNodeAddrs []string) *Client {
 	return &Client{
-		nameServerAddr:  nameServerAddr,
-		dataServerAddrs: dataServerAddrs,
+		nameNodeAddr:   nameNodeAddr,
+		dataNodeAddrs:  dataNodeAddrs,
+		dataNodeClient: make(map[string]*rpc.Client),
 	}
 }
 
 func (c *Client) Connect() {
 
-	client_logger.Println("Build Connection With Name Server:", c.nameServerAddr)
-	dialHTTP, err := rpc.DialHTTP("tcp", c.nameServerAddr)
+	client_logger.Println("Build Connection With Name Server:", c.nameNodeAddr)
+	dialHTTP, err := rpc.DialHTTP("tcp", c.nameNodeAddr)
 	if err != nil {
 		client_logger.Println("Connect to Name Server failed")
 		return
 	}
-	c.nameServerClient = dialHTTP
+	c.nameNodeClient = dialHTTP
 
-	for i, addr := range c.dataServerAddrs {
-		client_logger.Printf("Build Connection With Data Server %d: %s\n", i, addr)
+	for i, addr := range c.dataNodeAddrs {
+		client_logger.Printf("Build Connection With DataNode %d: %s\n", i, addr)
 		dialHTTP, err := rpc.DialHTTP("tcp", addr)
 		if err != nil {
-			client_logger.Printf("Connect to Data Server %d failed", i)
+			client_logger.Printf("Connect to DataNode %d failed", i)
 			return
 		}
-		c.dataServerClient = append(c.dataServerClient, dialHTTP)
+		c.dataNodeClient[addr] = dialHTTP
 	}
 	return
 }
 
 func (c *Client) Close() {
-	c.nameServerClient.Close()
+	c.nameNodeClient.Close()
 }
 
-func (c *Client) Upload(file string) error {
-
+func (c *Client) UploadFile(file string) error {
 	_, fileName := filepath.Split(file)
 	f, err := os.Open(file)
 	defer f.Close()
@@ -60,48 +61,39 @@ func (c *Client) Upload(file string) error {
 	}
 	stat, _ := f.Stat()
 	size := stat.Size()
-	data := make([]byte, 2*1024*1024)
-	var chunkID int64 = 0
-
-	for {
+	fileUploadMetaRequest := FileUploadMetaRequest{
+		FileName: fileName,
+		FileSize: size,
+	}
+	fileUploadMetaResponse := &FileUploadMetaResponse{}
+	err = c.nameNodeClient.Call("NameServer.Upload", fileUploadMetaRequest, fileUploadMetaResponse)
+	if err != nil {
+		client_logger.Printf("file metadata init failed %v\n", err)
+		return err
+	}
+	data := make([]byte, CHUNK_SIZE)
+	for _, chunk := range fileUploadMetaResponse.ChunkInfo {
 		n, err := f.Read(data)
 		if err != nil && err != io.EOF {
 			client_logger.Printf("file read error %v\n", err)
 			return err
 		}
-		if n == 0 {
-			break
-		}
-
-		fileReq := FileUploadMetaRequest{
-			FileName: fileName,
-			ChunkId:  chunkID,
-		}
-
-		fileResp := &FileUploadMetaResponse{}
-		err = c.nameServerClient.Call("NameServer.Upload", fileReq, fileResp)
-		if err != nil {
-			msg := fmt.Sprintf("meta data retreive fail %v\n", err)
-			client_logger.Println(msg)
-			return err
-		}
-		client_logger.Printf("file:%s, chunk:%d allocated to chunkId:%d dataserver:%d", fileName, fileReq.ChunkId, fileResp.ChunkId, fileResp.DataServerId)
 
 		chunkReq := ChunkWriteRequest{
-			ChunkId: fileResp.ChunkId,
-			DATA:    data[:n],
-			MD5Code: MD5Encode(data[:n]),
+			ChunkId:   chunk.ChunkId,
+			DATA:      data[:n],
+			DataNodes: chunk.DataNodeAddrs,
+			MD5Code:   MD5Encode(data[:n]),
 		}
 		chunkResp := &ChunkWriteResponse{}
-		err = c.dataServerClient[fileResp.DataServerId].Call("DataServer.Upload", chunkReq, chunkResp)
+		err = c.dataNodeClient[chunk.DataNodeAddrs[0]].Call("DataServer.Upload", chunkReq, chunkResp)
 		if err != nil {
-			msg := fmt.Sprintf("upload file fail %v\n", err)
+			msg := fmt.Sprintf("upload chunk %d fail %v\n", chunk.ChunkId, err)
 			client_logger.Println(msg)
 			return err
 		}
-		chunkID += 1
 	}
-	return nil
+	return err
 }
 
 func (c *Client) Download(filename string, dst string) {
@@ -110,10 +102,10 @@ func (c *Client) Download(filename string, dst string) {
 		FileName: filename,
 	}
 	resp := &FileDownloadMetaResponse{
-		DataServerId: make([]int, 0),
-		ChunkId:      make([]int64, 0),
+		DataServerAddrs: make([]string, 0),
+		ChunkId:         make([]int64, 0),
 	}
-	c.nameServerClient.Call("NameServer.Download", req, resp)
+	c.nameNodeClient.Call("NameServer.Download", req, resp)
 	fmt.Println(resp)
 	// 根据文件元数据，下载
 	newFilepath := filepath.Join(dst, filename)
@@ -127,8 +119,9 @@ func (c *Client) Download(filename string, dst string) {
 			ChunkId: chunkId,
 		}
 		chunkReadResponse := &ChunkReadResponse{}
-		c.dataServerClient[resp.DataServerId[i]].Call("DataServer.Download", chunkReadRequest, chunkReadResponse)
-		if !bytes.Equal(MD5Encode(chunkReadResponse.DATA), chunkReadResponse.MD5Code) {
+		c.dataNodeClient[resp.DataServerAddrs[i]].Call("DataServer.Download", chunkReadRequest, chunkReadResponse)
+		decodeString, _ := hex.DecodeString(resp.MD5Code[i])
+		if !bytes.Equal(MD5Encode(chunkReadResponse.DATA), decodeString) {
 			ns_logger.Println("file checked failed", err)
 			return
 		}
