@@ -2,6 +2,7 @@ package dfs
 
 import (
 	"fmt"
+	"mini-dfs/db"
 	"net"
 	"net/http"
 	"net/rpc"
@@ -90,6 +91,9 @@ func (d *DataServer) Write(req ChunkWriteRequest, res *ChunkWriteResponse) error
 }
 
 func (d *DataServer) Upload(req ChunkWriteRequest, res *ChunkWriteResponse) error {
+	md5Encode := MD5Encode(req.DATA)
+	//fmt.Println(hex.EncodeToString(md5Encode))
+	db.UpdateChunk(req.ChunkId, md5Encode)
 	err := d.Write(req, res)
 	if err != nil {
 		msg := fmt.Sprintf("Write file failed\n")
@@ -124,6 +128,7 @@ func (d *DataServer) Download(req ChunkReadRequest, res *ChunkReadResponse) erro
 		return err
 	}
 	res.DATA = make([]byte, 2*1024*1024)
+
 	n, err := f.Read(res.DATA)
 	if err != nil {
 		msg := fmt.Sprintf("Write file failed: %s\n", newPath)
@@ -132,5 +137,6 @@ func (d *DataServer) Download(req ChunkReadRequest, res *ChunkReadResponse) erro
 		return err
 	}
 	res.DATA = res.DATA[:n]
+	res.MD5Code = MD5Encode(res.DATA)
 	return nil
 }

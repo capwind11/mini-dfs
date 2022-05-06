@@ -1,6 +1,7 @@
 package dfs
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"net/rpc"
@@ -46,38 +47,6 @@ func (c *Client) Connect() {
 
 func (c *Client) Close() {
 	c.nameServerClient.Close()
-	for _, clt := range c.dataServerClient {
-		clt.Close()
-	}
-}
-
-func (c *Client) Download(filename string, dst string) {
-	// 获取元数据
-	req := FileDownloadMetaRequest{
-		FileName: filename,
-	}
-	resp := &FileDownloadMetaResponse{
-		DataServerId: make([]int, 0),
-		ChunkId:      make([]int64, 0),
-	}
-	c.nameServerClient.Call("NameServer.Download", req, resp)
-	fmt.Println(resp)
-	// 根据文件元数据，下载
-	newFilepath := filepath.Join(dst, filename)
-	f, err := os.Create(newFilepath)
-	if err != nil {
-		ns_logger.Println("create file failed", err)
-		return
-	}
-	for i, chunkId := range resp.ChunkId {
-		chunkReadRequest := ChunkReadRequest{
-			ChunkId: chunkId,
-		}
-		chunkReadResponse := &ChunkReadResponse{}
-		c.dataServerClient[resp.DataServerId[i]].Call("DataServer.Download", chunkReadRequest, chunkReadResponse)
-		f.Write(chunkReadResponse.DATA)
-	}
-	return
 }
 
 func (c *Client) Upload(file string) error {
@@ -86,11 +55,11 @@ func (c *Client) Upload(file string) error {
 	f, err := os.Open(file)
 	defer f.Close()
 	if err != nil {
-		msg := fmt.Sprintf("file not exist %v\n", err)
-		client_logger.Println(msg)
+		client_logger.Printf("file not exist %v\n", err)
 		return err
 	}
-
+	stat, _ := f.Stat()
+	size := stat.Size()
 	data := make([]byte, 2*1024*1024)
 	var chunkID int64 = 0
 
@@ -121,6 +90,7 @@ func (c *Client) Upload(file string) error {
 		chunkReq := ChunkWriteRequest{
 			ChunkId: fileResp.ChunkId,
 			DATA:    data[:n],
+			MD5Code: MD5Encode(data[:n]),
 		}
 		chunkResp := &ChunkWriteResponse{}
 		err = c.dataServerClient[fileResp.DataServerId].Call("DataServer.Upload", chunkReq, chunkResp)
@@ -132,4 +102,37 @@ func (c *Client) Upload(file string) error {
 		chunkID += 1
 	}
 	return nil
+}
+
+func (c *Client) Download(filename string, dst string) {
+	// 获取元数据
+	req := FileDownloadMetaRequest{
+		FileName: filename,
+	}
+	resp := &FileDownloadMetaResponse{
+		DataServerId: make([]int, 0),
+		ChunkId:      make([]int64, 0),
+	}
+	c.nameServerClient.Call("NameServer.Download", req, resp)
+	fmt.Println(resp)
+	// 根据文件元数据，下载
+	newFilepath := filepath.Join(dst, filename)
+	f, err := os.Create(newFilepath)
+	if err != nil {
+		ns_logger.Println("create file failed", err)
+		return
+	}
+	for i, chunkId := range resp.ChunkId {
+		chunkReadRequest := ChunkReadRequest{
+			ChunkId: chunkId,
+		}
+		chunkReadResponse := &ChunkReadResponse{}
+		c.dataServerClient[resp.DataServerId[i]].Call("DataServer.Download", chunkReadRequest, chunkReadResponse)
+		if !bytes.Equal(MD5Encode(chunkReadResponse.DATA), chunkReadResponse.MD5Code) {
+			ns_logger.Println("file checked failed", err)
+			return
+		}
+		f.Write(chunkReadResponse.DATA)
+	}
+	return
 }

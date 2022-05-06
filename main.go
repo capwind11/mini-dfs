@@ -1,6 +1,9 @@
 package main
 
-import "mini-dfs/dfs"
+import (
+	"mini-dfs/db"
+	"mini-dfs/dfs"
+)
 
 func initDataServer(addrs []string) {
 	ds := make([]*dfs.DataServer, 0)
@@ -16,7 +19,7 @@ func initDataServer(addrs []string) {
 }
 
 func main() {
-
+	db.InitDB()
 	nameServerAddr := "127.0.0.1:8080"
 	nameServer := dfs.NewNameServer(nameServerAddr)
 	go nameServer.RunRpcServer()

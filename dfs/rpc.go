@@ -1,28 +1,9 @@
 package dfs
 
-type FileWriteRequest struct {
-	FileName string
-	DATA     []byte
-}
-
-type FileWriteResponse struct {
-	msg    string
-	STATUS int
-}
-
-type FileReadRequest struct {
-	FileName string
-}
-
-type FileReadResponse struct {
-	FileName string
-	DATA     []byte
-	msg      string
-}
-
 type ChunkWriteRequest struct {
 	ChunkId int64
 	DATA    []byte
+	MD5Code []byte
 }
 
 type ChunkWriteResponse struct {
@@ -35,8 +16,9 @@ type ChunkReadRequest struct {
 }
 
 type ChunkReadResponse struct {
-	DATA []byte
-	msg  string
+	DATA    []byte
+	MD5Code []byte
+	msg     string
 }
 
 type FileUploadMetaRequest struct {
