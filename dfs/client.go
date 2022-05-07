@@ -17,10 +17,9 @@ type Client struct {
 	nameNodeClient *rpc.Client
 }
 
-func NewClient(nameNodeAddr string, dataNodeAddrs []string) *Client {
+func NewClient(nameNodeAddr string) *Client {
 	return &Client{
 		nameNodeAddr:   nameNodeAddr,
-		dataNodeAddrs:  dataNodeAddrs,
 		dataNodeClient: make(map[string]*rpc.Client),
 	}
 }
@@ -34,8 +33,15 @@ func (c *Client) Connect() {
 		return
 	}
 	c.nameNodeClient = dialHTTP
-
-	for i, addr := range c.dataNodeAddrs {
+	dataNodeInfoReq := DataNodeInfoReq{}
+	dataNodeInfoResp := &DataNodeInfoResp{}
+	err = c.nameNodeClient.Call("NameNode.GetDataNodeAddrs", dataNodeInfoReq, dataNodeInfoResp)
+	if err != nil {
+		client_logger.Println("get datanode info failed")
+		return
+	}
+	for i, addr := range dataNodeInfoResp.Addrs {
+		c.dataNodeAddrs = append(c.dataNodeAddrs, addr)
 		client_logger.Printf("Build Connection With DataNode %d: %s\n", i, addr)
 		dialHTTP, err := rpc.DialHTTP("tcp", addr)
 		if err != nil {
@@ -66,7 +72,7 @@ func (c *Client) UploadFile(file string) error {
 		FileSize: size,
 	}
 	fileUploadMetaResponse := &FileUploadMetaResponse{}
-	err = c.nameNodeClient.Call("NameServer.Upload", fileUploadMetaRequest, fileUploadMetaResponse)
+	err = c.nameNodeClient.Call("NameNode.Upload", fileUploadMetaRequest, fileUploadMetaResponse)
 	if err != nil {
 		client_logger.Printf("file metadata init failed %v\n", err)
 		return err
@@ -105,7 +111,7 @@ func (c *Client) Download(filename string, dst string) {
 		DataServerAddrs: make([]string, 0),
 		ChunkId:         make([]int64, 0),
 	}
-	c.nameNodeClient.Call("NameServer.Download", req, resp)
+	c.nameNodeClient.Call("NameNode.Download", req, resp)
 	//fmt.Println(resp)
 	// 根据文件元数据，下载
 	newFilepath := filepath.Join(dst, filename)

@@ -11,6 +11,7 @@ type DataNodeConnectRequest struct {
 
 type DataNodeConnectResponse struct {
 	STATUS int
+	Id     int
 }
 
 type HeartBeatRequest struct {
@@ -69,4 +70,11 @@ type PeerReplicateRequest struct {
 
 type PeerReplicateResponse struct {
 	Status int
+}
+
+type DataNodeInfoReq struct {
+}
+
+type DataNodeInfoResp struct {
+	Addrs []string
 }

@@ -6,7 +6,7 @@ import (
 	"os"
 )
 
-var ns_logger = log.New(os.Stdout, "NameServer:", log.Lshortfile)
+var ns_logger = log.New(os.Stdout, "NameNode:", log.Lshortfile)
 var ds_logger = log.New(os.Stdout, "DataNode:", log.Lshortfile)
 var client_logger = log.New(os.Stdout, "client:", log.Lshortfile)
 

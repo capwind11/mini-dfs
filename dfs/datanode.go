@@ -20,22 +20,34 @@ type DataNode struct {
 	nameNodeAddr string
 	rpcServer    *rpc.Server // RPC服务器
 	dataPath     string
-	lis          net.Listener
+	listener     net.Listener
 }
 
-func NewDataNode(addr string, nameServerAddr string, id int) *DataNode {
-	dataPath := DATA_PATH + strconv.Itoa(id)
-	_, err := os.Stat(dataPath)
-	if err != nil {
-		os.Mkdir(dataPath, 755)
-	}
+func NewDataNode(addr string, nameServerAddr string) *DataNode {
 
 	return &DataNode{
 		addr:         addr,
 		nameNodeAddr: nameServerAddr,
-		id:           id,
-		dataPath:     dataPath,
 	}
+}
+
+func (d *DataNode) Run() {
+	ds_logger.Printf("Run DataNode: %s\n", d.addr)
+	server := rpc.NewServer()
+
+	server.Register(d)
+	d.rpcServer = server
+	listener, err := net.Listen("tcp", d.addr)
+	d.listener = listener
+	if err != nil {
+		ds_logger.Println("Listen error:", err)
+	}
+	go http.Serve(listener, server)
+
+	d.ConnectToNameNode()
+	c := make(chan os.Signal)
+	_ = <-c
+
 }
 
 func (d *DataNode) ConnectToNameNode() error {
@@ -43,12 +55,19 @@ func (d *DataNode) ConnectToNameNode() error {
 		Addr: d.addr,
 	}
 	resp := &DataNodeConnectResponse{}
-	err := d.Call(d.nameNodeAddr, "NameServer.ConnectToNameNode", req, resp)
+	err := d.Call(d.nameNodeAddr, "NameNode.ConnectToNameNode", req, resp)
 	if err != nil || resp.STATUS == FAILED {
 		ds_logger.Println("Connect to NameNode failed")
 		return errors.New("connect to NameNode failed")
 	}
-	ds_logger.Printf("%d connect to NameNode success\n", d.id)
+	d.id = resp.Id
+
+	d.dataPath = DATA_PATH + strconv.Itoa(d.id)
+	_, err = os.Stat(d.dataPath)
+	if err != nil {
+		os.Mkdir(d.dataPath, 755)
+	}
+	ds_logger.Printf("DataNode %d connect to NameNode success\n", d.id)
 	return nil
 }
 
@@ -70,7 +89,7 @@ func (d *DataNode) RunRpcServer() (net.Listener, error) {
 	server.Register(d)
 	d.rpcServer = server
 	listener, err := net.Listen("tcp", d.addr)
-	d.lis = listener
+	d.listener = listener
 	if err != nil {
 		ds_logger.Println("Listen error:", err)
 		return nil, err
@@ -119,7 +138,7 @@ func (d *DataNode) Upload(req ChunkWriteRequest, res *ChunkWriteResponse) error 
 		res.msg = msg
 		return err
 	}
-	for i := 1; i < 3; i += 1 {
+	for i := 1; i < len(req.DataNodes); i += 1 {
 		target := req.DataNodes[i]
 		chunkResp := &ChunkWriteResponse{}
 		er := d.Call(target, "DataNode.Write", req, chunkResp)

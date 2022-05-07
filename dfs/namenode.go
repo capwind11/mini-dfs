@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-type NameServer struct {
+type NameNode struct {
 	addr           string
 	datanodeAddr   []string
 	datanodes      []*rpc.Client
@@ -22,8 +22,8 @@ type NameServer struct {
 	nextDataServer int
 }
 
-func NewNameServer(addr string) *NameServer {
-	return &NameServer{
+func NewNameServer(addr string) *NameNode {
+	return &NameNode{
 		addr:           addr,
 		fileMetaData:   make(map[string][]int64),
 		chunkMetaData:  make(map[int64][]int),
@@ -31,9 +31,27 @@ func NewNameServer(addr string) *NameServer {
 	}
 }
 
-func (s *NameServer) RunRpcServer() (net.Listener, error) {
+func (n *NameNode) Run() {
+	ns_logger.Printf("Run NameNode: %s\n", n.addr)
+	server := rpc.NewServer()
+	server.Register(n)
+	n.rpcServer = server
+	listener, err := net.Listen("tcp", n.addr)
+	if err != nil {
+		ns_logger.Println("Listen error", err)
+	}
+	go http.Serve(listener, server)
+	for {
+		select {
+		case <-time.After(HeartBeatIntervalTime):
+			n.SendHeartBeat()
+		}
+	}
+}
 
-	ns_logger.Printf("Run NameServer: %s\n", s.addr)
+func (s *NameNode) RunRpcServer() (net.Listener, error) {
+
+	ns_logger.Printf("Run NameNode: %s\n", s.addr)
 	server := rpc.NewServer()
 	server.Register(s)
 	s.rpcServer = server
@@ -45,7 +63,7 @@ func (s *NameServer) RunRpcServer() (net.Listener, error) {
 	return listener, http.Serve(listener, server)
 }
 
-func (s *NameServer) Upload(req FileUploadMetaRequest, resp *FileUploadMetaResponse) error {
+func (s *NameNode) Upload(req FileUploadMetaRequest, resp *FileUploadMetaResponse) error {
 	fileName := req.FileName
 
 	chunk_num := req.FileSize / CHUNK_SIZE
@@ -56,8 +74,9 @@ func (s *NameServer) Upload(req FileUploadMetaRequest, resp *FileUploadMetaRespo
 		chunk_num += 1
 	}
 	for chunk_num != 0 {
-		datanodeList := []string{s.datanodeAddr[s.nextDataServer], s.datanodeAddr[(s.nextDataServer+1)%4], s.datanodeAddr[(s.nextDataServer+2)%4]}
-		chunkID := db.InsertChunk(fileid, fmt.Sprintf("%s;%s;%s", datanodeList[0], datanodeList[1], datanodeList[2]))
+		datanodeList := []string{s.datanodeAddr[s.nextDataServer]} //, s.datanodeAddr[(s.nextDataServer+1)%4], s.datanodeAddr[(s.nextDataServer+2)%4]}
+
+		chunkID := db.InsertChunk(fileid, strings.Join(datanodeList, ";"))
 		if chunkID == -1 {
 			ns_logger.Println("insert chunk fail")
 			return errors.New("insert chunk fail")
@@ -67,12 +86,12 @@ func (s *NameServer) Upload(req FileUploadMetaRequest, resp *FileUploadMetaRespo
 			DataNodeAddrs: datanodeList,
 		})
 		chunk_num -= 1
-		s.nextDataServer = (s.nextDataServer + 1) % 4
+		s.nextDataServer = (s.nextDataServer + 1) % len(s.datanodeAddr)
 	}
 	return nil
 }
 
-func (s *NameServer) Download(req FileDownloadMetaRequest, resp *FileDownloadMetaResponse) error {
+func (s *NameNode) Download(req FileDownloadMetaRequest, resp *FileDownloadMetaResponse) error {
 	fileName := req.FileName
 	chunkInfo := db.QueryFile(fileName)
 	if chunkInfo == nil {
@@ -83,13 +102,14 @@ func (s *NameServer) Download(req FileDownloadMetaRequest, resp *FileDownloadMet
 	for _, chunk := range chunkInfo {
 		resp.ChunkId = append(resp.ChunkId, chunk.Id)
 		resp.MD5Code = append(resp.MD5Code, chunk.MD5CODE)
-		dataNodeAddr := strings.Split(chunk.DataNodeAddrs, ";")[rand.Intn(3)]
+		splitAddrs := strings.Split(chunk.DataNodeAddrs, ";")
+		dataNodeAddr := splitAddrs[rand.Intn(len(splitAddrs))]
 		resp.DataServerAddrs = append(resp.DataServerAddrs, dataNodeAddr)
 	}
 	return nil
 }
 
-func (n *NameServer) ConnectToNameNode(req DataNodeConnectRequest, resp *DataNodeConnectResponse) error {
+func (n *NameNode) ConnectToNameNode(req DataNodeConnectRequest, resp *DataNodeConnectResponse) error {
 	n.datanodeAddr = append(n.datanodeAddr, req.Addr)
 	dialHTTP, err := rpc.DialHTTP("tcp", req.Addr)
 	if err != nil {
@@ -98,27 +118,34 @@ func (n *NameServer) ConnectToNameNode(req DataNodeConnectRequest, resp *DataNod
 	}
 	n.datanodes = append(n.datanodes, dialHTTP)
 	resp.STATUS = SUCCESS
+	resp.Id = len(n.datanodes) - 1
 	return nil
 }
 
-func (n *NameServer) CloseConnectionToDataNodes() {
+func (n *NameNode) CloseConnectionToDataNodes() {
 	for _, dn := range n.datanodes {
 		dn.Close()
 	}
 	return
 }
 
-func (n *NameServer) RunServer() {
+func (n *NameNode) RunServer() {
 	for {
 		select {
 		case <-time.After(HeartBeatIntervalTime):
 			n.SendHeartBeat()
 		}
 	}
-
 }
 
-func (n *NameServer) SendHeartBeat() {
+func (n *NameNode) GetDataNodeAddrs(req DataNodeInfoReq, resp *DataNodeInfoResp) error {
+	for _, addr := range n.datanodeAddr {
+		resp.Addrs = append(resp.Addrs, addr)
+	}
+	return nil
+}
+
+func (n *NameNode) SendHeartBeat() {
 
 	for i, dn := range n.datanodes {
 		req := HeartBeatRequest{}
@@ -132,7 +159,7 @@ func (n *NameServer) SendHeartBeat() {
 	}
 }
 
-func (n *NameServer) DataRecovery(addr string) {
+func (n *NameNode) DataRecovery(addr string) {
 	chunkIds := db.QueryChunkOnDataNode(addr)
 	db.DeleteChunkOnDataNode(addr)
 	chunks := db.QueryChunks(chunkIds)
