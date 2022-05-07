@@ -86,7 +86,7 @@ func (c *Client) UploadFile(file string) error {
 			MD5Code:   MD5Encode(data[:n]),
 		}
 		chunkResp := &ChunkWriteResponse{}
-		err = c.dataNodeClient[chunk.DataNodeAddrs[0]].Call("DataServer.Upload", chunkReq, chunkResp)
+		err = c.dataNodeClient[chunk.DataNodeAddrs[0]].Call("DataNode.Upload", chunkReq, chunkResp)
 		if err != nil {
 			msg := fmt.Sprintf("upload chunk %d fail %v\n", chunk.ChunkId, err)
 			client_logger.Println(msg)
@@ -106,10 +106,11 @@ func (c *Client) Download(filename string, dst string) {
 		ChunkId:         make([]int64, 0),
 	}
 	c.nameNodeClient.Call("NameServer.Download", req, resp)
-	fmt.Println(resp)
+	//fmt.Println(resp)
 	// 根据文件元数据，下载
 	newFilepath := filepath.Join(dst, filename)
 	f, err := os.Create(newFilepath)
+	defer f.Close()
 	if err != nil {
 		ns_logger.Println("create file failed", err)
 		return
@@ -119,7 +120,7 @@ func (c *Client) Download(filename string, dst string) {
 			ChunkId: chunkId,
 		}
 		chunkReadResponse := &ChunkReadResponse{}
-		c.dataNodeClient[resp.DataServerAddrs[i]].Call("DataServer.Download", chunkReadRequest, chunkReadResponse)
+		c.dataNodeClient[resp.DataServerAddrs[i]].Call("DataNode.Download", chunkReadRequest, chunkReadResponse)
 		decodeString, _ := hex.DecodeString(resp.MD5Code[i])
 		if !bytes.Equal(MD5Encode(chunkReadResponse.DATA), decodeString) {
 			ns_logger.Println("file checked failed", err)

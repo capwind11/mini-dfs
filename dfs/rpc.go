@@ -5,6 +5,21 @@ type ChunkMetaData struct {
 	DataNodeAddrs []string
 }
 
+type DataNodeConnectRequest struct {
+	Addr string
+}
+
+type DataNodeConnectResponse struct {
+	STATUS int
+}
+
+type HeartBeatRequest struct {
+}
+
+type HeartBeatResponse struct {
+	STATUS int
+}
+
 type ChunkWriteRequest struct {
 	ChunkId   int64
 	DATA      []byte
@@ -46,13 +61,12 @@ type FileDownloadMetaResponse struct {
 	ChunkId         []int64
 	MD5Code         []string
 }
-
-type ChunkMetaRequest struct {
-	FileName string
-	ChunkId  int64
+type PeerReplicateRequest struct {
+	ChunkId         []int64
+	DataServerAddrs []string
+	MD5Code         []string
 }
 
-type ChunkMetaResponse struct {
-	ChunkId int64
-	msg     string
+type PeerReplicateResponse struct {
+	Status int
 }

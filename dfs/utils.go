@@ -7,7 +7,7 @@ import (
 )
 
 var ns_logger = log.New(os.Stdout, "NameServer:", log.Lshortfile)
-var ds_logger = log.New(os.Stdout, "DataServer:", log.Lshortfile)
+var ds_logger = log.New(os.Stdout, "DataNode:", log.Lshortfile)
 var client_logger = log.New(os.Stdout, "client:", log.Lshortfile)
 
 func MD5Encode(chunk []byte) []byte {
@@ -16,6 +16,11 @@ func MD5Encode(chunk []byte) []byte {
 	return h.Sum(nil)
 }
 
-func Show() {
-
+func Find(slice []string, val string) (int, bool) {
+	for i, item := range slice {
+		if item == val {
+			return i, true
+		}
+	}
+	return -1, false
 }
