@@ -4,6 +4,8 @@ import "time"
 
 var CHUNK_SIZE int64 = 2 * 1024 * 1024
 
+var REPLICATE_NUM = 3
+
 var DATA_PATH = "./data/ds"
 
 var HeartBeatIntervalTime = 200 * time.Millisecond

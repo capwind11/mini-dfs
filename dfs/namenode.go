@@ -74,7 +74,10 @@ func (s *NameNode) Upload(req FileUploadMetaRequest, resp *FileUploadMetaRespons
 		chunk_num += 1
 	}
 	for chunk_num != 0 {
-		datanodeList := []string{s.datanodeAddr[s.nextDataServer]} //, s.datanodeAddr[(s.nextDataServer+1)%4], s.datanodeAddr[(s.nextDataServer+2)%4]}
+		datanodeList := make([]string, 0) //, s.datanodeAddr[(s.nextDataServer+1)%4], s.datanodeAddr[(s.nextDataServer+2)%4]}
+		for i := 0; i < REPLICATE_NUM; i += 1 {
+			datanodeList = append(datanodeList, s.datanodeAddr[(s.nextDataServer+i)%len(s.datanodeAddr)])
+		}
 
 		chunkID := db.InsertChunk(fileid, strings.Join(datanodeList, ";"))
 		if chunkID == -1 {
@@ -153,8 +156,10 @@ func (n *NameNode) SendHeartBeat() {
 		err := dn.Call("DataNode.HeartBeat", req, resp)
 		if err != nil {
 			// 迁移数据
-			n.DataRecovery(n.datanodeAddr[i])
 			ns_logger.Printf("datanode:%s failed", n.datanodeAddr[i])
+			n.DataRecovery(n.datanodeAddr[i])
+			n.datanodeAddr = append(n.datanodeAddr[:i], n.datanodeAddr[i+1:]...)
+			n.datanodes = append(n.datanodes[:i], n.datanodes[i+1:]...)
 		}
 	}
 }
@@ -202,8 +207,16 @@ func (n *NameNode) DataRecovery(addr string) {
 		datanode2chunk[source].DataServerAddrs = append(datanode2chunk[source].DataServerAddrs, n.datanodeAddr[target])
 	}
 	for i, req := range datanode2chunk {
-		resp := PeerReplicateResponse{}
-		n.datanodes[i].Call("DataNode.PeerReplicate", req, resp)
+		peerReplicateRequest := PeerReplicateRequest{
+			ChunkId:         req.ChunkId,
+			MD5Code:         req.MD5Code,
+			DataServerAddrs: req.DataServerAddrs,
+		}
+		resp := &PeerReplicateResponse{}
+		err := n.datanodes[i].Call("DataNode.PeerReplicate", peerReplicateRequest, resp)
+		if err != nil {
+			ns_logger.Println(err)
+			return
+		}
 	}
-	// for chunkId in 找到唯一不在的datanode 从一个datanode拷贝过去
 }

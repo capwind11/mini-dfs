@@ -19,6 +19,7 @@ func initDataServer(addrs []string, nameServerAddr string) []*dfs.DataNode {
 
 func TestUploadDownload(t *testing.T) {
 	db.InitDB()
+	dfs.REPLICATE_NUM = 2
 
 	dataServerAddr := []string{"127.0.0.1:8081", "127.0.0.1:8082", "127.0.0.1:8083", "127.0.0.1:8084"}
 	nameServerAddr := "127.0.0.1:8080"
