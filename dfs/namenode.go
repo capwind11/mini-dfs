@@ -122,6 +122,7 @@ func (n *NameNode) ConnectToNameNode(req DataNodeConnectRequest, resp *DataNodeC
 	n.datanodes = append(n.datanodes, dialHTTP)
 	resp.STATUS = SUCCESS
 	resp.Id = len(n.datanodes) - 1
+	REPLICATE_NUM += 1
 	return nil
 }
 

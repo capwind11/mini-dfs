@@ -20,12 +20,7 @@ func main() {
 		dataNode.Run()
 	} else {
 		client := dfs.NewClient(*namenodeAddr)
-		client.Connect()
-		//client.UploadFile("./data/tmp/2.pdf")
-		client.Download("2.pdf", "./data/temp")
-		//client.UploadFile("./data/tmp/4.pdf")
-		client.Download("4.pdf", "./data/temp")
-		client.Close()
+		client.Run()
 	}
 
 }

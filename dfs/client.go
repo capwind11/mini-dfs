@@ -1,6 +1,7 @@
 package dfs
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/hex"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 	"net/rpc"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 type Client struct {
@@ -22,6 +24,43 @@ func NewClient(nameNodeAddr string) *Client {
 		nameNodeAddr:   nameNodeAddr,
 		dataNodeClient: make(map[string]*rpc.Client),
 	}
+}
+
+func (c *Client) Run() {
+	c.Connect()
+	fmt.Println("mini-dfs start")
+	var command string
+	for {
+		fmt.Printf(">> ")
+		fmt.Scan()
+		// 从stdin中取内容直到遇到换行符，停止
+		input, err := bufio.NewReader(os.Stdin).ReadString('\n')
+		if err != nil {
+			panic(err)
+		}
+		command = strings.TrimSpace(input)
+
+		elements := strings.Split(command, " ")
+		if len(elements) == 0 {
+			continue
+		}
+		if elements[0] == "get" {
+			if len(elements) != 3 {
+				fmt.Println("miss data dir")
+			}
+			c.Download(elements[1], elements[2])
+		} else if elements[0] == "put" {
+			if len(elements) != 2 {
+				fmt.Println("miss data dir")
+			}
+			c.UploadFile(elements[1])
+		} else if elements[0] == "quit" {
+			break
+		} else {
+			fmt.Println("unrecognized command")
+		}
+	}
+	c.Close()
 }
 
 func (c *Client) Connect() {
