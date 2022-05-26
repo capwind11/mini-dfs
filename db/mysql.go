@@ -23,7 +23,7 @@ type ChunkDB struct {
 
 // 初始化全局的数据库连接对象
 func InitDB() {
-	database, err := sqlx.Open("mysql", "root:root@tcp(127.0.0.1:3306)/mini_dfs")
+	database, err := sqlx.Open("mysql", "root:112112@tcp(127.0.0.1:3306)/mini_dfs")
 	if err != nil {
 		sql_logger.Println("open mysql failed,", err)
 		return
