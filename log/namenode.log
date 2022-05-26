@@ -1,0 +1,41 @@
+NameNode:namenode.go:35: Run NameNode: 127.0.0.1:8080
+2022/05/24 16:21:49 rpc.Register: method "CloseConnectionToDataNodes" has 1 input parameters; needs exactly three
+2022/05/24 16:21:49 rpc.Register: method "DataRecovery" has 2 input parameters; needs exactly three
+2022/05/24 16:21:49 rpc.Register: method "Run" has 1 input parameters; needs exactly three
+2022/05/24 16:21:49 rpc.Register: method "RunRpcServer" has 1 input parameters; needs exactly three
+2022/05/24 16:21:49 rpc.Register: method "RunServer" has 1 input parameters; needs exactly three
+2022/05/24 16:21:49 rpc.Register: method "SendHeartBeat" has 1 input parameters; needs exactly three
+3
+SQL:mysql.go:46: insert file:1 succ:
+SQL:mysql.go:61: insert chunk:1 succ
+SQL:mysql.go:61: insert chunk:2 succ
+SQL:mysql.go:61: insert chunk:3 succ
+SQL:mysql.go:61: insert chunk:4 succ
+SQL:mysql.go:61: insert chunk:5 succ
+SQL:mysql.go:61: insert chunk:6 succ
+SQL:mysql.go:61: insert chunk:7 succ
+SQL:mysql.go:61: insert chunk:8 succ
+SQL:mysql.go:61: insert chunk:9 succ
+SQL:mysql.go:61: insert chunk:10 succ
+SQL:mysql.go:61: insert chunk:11 succ
+SQL:mysql.go:61: insert chunk:12 succ
+3
+SQL:mysql.go:46: insert file:2 succ:
+SQL:mysql.go:61: insert chunk:13 succ
+SQL:mysql.go:61: insert chunk:14 succ
+SQL:mysql.go:61: insert chunk:15 succ
+SQL:mysql.go:61: insert chunk:16 succ
+NameNode:namenode.go:161: datanode:127.0.0.1:8081 failed
+SQL:mysql.go:138: delete succ:  12
+SQL:mysql.go:166: update success, affected rows:1
+SQL:mysql.go:166: update success, affected rows:1
+SQL:mysql.go:166: update success, affected rows:1
+SQL:mysql.go:166: update success, affected rows:1
+SQL:mysql.go:166: update success, affected rows:1
+SQL:mysql.go:166: update success, affected rows:1
+SQL:mysql.go:166: update success, affected rows:1
+SQL:mysql.go:166: update success, affected rows:1
+SQL:mysql.go:166: update success, affected rows:1
+SQL:mysql.go:166: update success, affected rows:1
+SQL:mysql.go:166: update success, affected rows:1
+SQL:mysql.go:166: update success, affected rows:1

@@ -49,13 +49,13 @@ func (n *NameNode) Run() {
 	}
 }
 
-func (s *NameNode) RunRpcServer() (net.Listener, error) {
+func (n *NameNode) RunRpcServer() (net.Listener, error) {
 
-	ns_logger.Printf("Run NameNode: %s\n", s.addr)
+	ns_logger.Printf("Run NameNode: %s\n", n.addr)
 	server := rpc.NewServer()
-	server.Register(s)
-	s.rpcServer = server
-	listener, err := net.Listen("tcp", s.addr)
+	server.Register(n)
+	n.rpcServer = server
+	listener, err := net.Listen("tcp", n.addr)
 	if err != nil {
 		ns_logger.Println("Listen error", err)
 		return nil, err
@@ -63,9 +63,10 @@ func (s *NameNode) RunRpcServer() (net.Listener, error) {
 	return listener, http.Serve(listener, server)
 }
 
-func (s *NameNode) Upload(req FileUploadMetaRequest, resp *FileUploadMetaResponse) error {
+func (n *NameNode) Upload(req FileUploadMetaRequest, resp *FileUploadMetaResponse) error {
 	fileName := req.FileName
-
+	REPLICATE_NUM = len(n.datanodes) - 1
+	fmt.Println(REPLICATE_NUM)
 	chunk_num := req.FileSize / CHUNK_SIZE
 	fileid := db.InsertFile(fileName, chunk_num)
 	resp.FileID = fileid
@@ -76,7 +77,7 @@ func (s *NameNode) Upload(req FileUploadMetaRequest, resp *FileUploadMetaRespons
 	for chunk_num != 0 {
 		datanodeList := make([]string, 0) //, s.datanodeAddr[(s.nextDataServer+1)%4], s.datanodeAddr[(s.nextDataServer+2)%4]}
 		for i := 0; i < REPLICATE_NUM; i += 1 {
-			datanodeList = append(datanodeList, s.datanodeAddr[(s.nextDataServer+i)%len(s.datanodeAddr)])
+			datanodeList = append(datanodeList, n.datanodeAddr[(n.nextDataServer+i)%len(n.datanodeAddr)])
 		}
 
 		chunkID := db.InsertChunk(fileid, strings.Join(datanodeList, ";"))
@@ -89,12 +90,12 @@ func (s *NameNode) Upload(req FileUploadMetaRequest, resp *FileUploadMetaRespons
 			DataNodeAddrs: datanodeList,
 		})
 		chunk_num -= 1
-		s.nextDataServer = (s.nextDataServer + 1) % len(s.datanodeAddr)
+		n.nextDataServer = (n.nextDataServer + 1) % len(n.datanodeAddr)
 	}
 	return nil
 }
 
-func (s *NameNode) Download(req FileDownloadMetaRequest, resp *FileDownloadMetaResponse) error {
+func (n *NameNode) Download(req FileDownloadMetaRequest, resp *FileDownloadMetaResponse) error {
 	fileName := req.FileName
 	chunkInfo := db.QueryFile(fileName)
 	if chunkInfo == nil {
@@ -122,7 +123,6 @@ func (n *NameNode) ConnectToNameNode(req DataNodeConnectRequest, resp *DataNodeC
 	n.datanodes = append(n.datanodes, dialHTTP)
 	resp.STATUS = SUCCESS
 	resp.Id = len(n.datanodes) - 1
-	REPLICATE_NUM += 1
 	return nil
 }
 
@@ -149,6 +149,7 @@ func (n *NameNode) GetDataNodeAddrs(req DataNodeInfoReq, resp *DataNodeInfoResp)
 	return nil
 }
 
+// SendHeartBeat 发送心跳包
 func (n *NameNode) SendHeartBeat() {
 
 	for i, dn := range n.datanodes {
@@ -156,9 +157,13 @@ func (n *NameNode) SendHeartBeat() {
 		resp := &HeartBeatResponse{}
 		err := dn.Call("DataNode.HeartBeat", req, resp)
 		if err != nil {
-			// 迁移数据
+
 			ns_logger.Printf("datanode:%s failed", n.datanodeAddr[i])
+
+			// 如果未收到来自i号DataNode的心跳回复，则启动恢复任务
 			n.DataRecovery(n.datanodeAddr[i])
+
+			// 将已失效的i号DataNode从健康连接的列表中删除
 			n.datanodeAddr = append(n.datanodeAddr[:i], n.datanodeAddr[i+1:]...)
 			n.datanodes = append(n.datanodes[:i], n.datanodes[i+1:]...)
 		}

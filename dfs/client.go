@@ -12,11 +12,12 @@ import (
 	"strings"
 )
 
+// Client Client要建立跟namenode和datanode的连接
 type Client struct {
 	nameNodeAddr   string
 	dataNodeAddrs  []string
-	dataNodeClient map[string]*rpc.Client
-	nameNodeClient *rpc.Client
+	dataNodeClient map[string]*rpc.Client // 存储从地址到跟datanode的rpc连接的对象
+	nameNodeClient *rpc.Client            // 跟namenode连接
 }
 
 func NewClient(nameNodeAddr string) *Client {
@@ -27,13 +28,16 @@ func NewClient(nameNodeAddr string) *Client {
 }
 
 func (c *Client) Run() {
+	// 先建立连接
 	c.Connect()
 	fmt.Println("mini-dfs start")
+
+	// 从命令行读取不同指令
 	var command string
 	for {
 		fmt.Printf(">> ")
 		fmt.Scan()
-		// 从stdin中取内容直到遇到换行符，停止
+		// 从stdin中读取指令直到遇到换行符，停止
 		input, err := bufio.NewReader(os.Stdin).ReadString('\n')
 		if err != nil {
 			panic(err)
@@ -44,7 +48,9 @@ func (c *Client) Run() {
 		if len(elements) == 0 {
 			continue
 		}
+		// 有get下载和put上传两种操作
 		if elements[0] == "get" {
+			// get remote_path local_path 根据远端文件名将文件下载到本地指定地址
 			if len(elements) != 3 {
 				fmt.Println("miss data dir")
 			}
