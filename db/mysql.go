@@ -5,13 +5,14 @@ import (
 	"fmt"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
+	"io"
 	"log"
 	"os"
 	"strconv"
 	"strings"
 )
 
-var sql_logger = log.New(os.Stdout, "SQL:", log.Lshortfile)
+var sql_logger *log.Logger
 var GLOBAL_DB *sqlx.DB
 
 type ChunkDB struct {
@@ -23,6 +24,12 @@ type ChunkDB struct {
 
 // 初始化全局的数据库连接对象
 func InitDB() {
+	file, err := os.OpenFile("./log/sql.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	if err != nil {
+		log.Fatalln("Faild to open error logger file:", err)
+	}
+	sql_logger = log.New(io.MultiWriter(file), "NameNode:", log.Lshortfile)
+
 	database, err := sqlx.Open("mysql", "root:112112@tcp(127.0.0.1:3306)/mini_dfs")
 	if err != nil {
 		sql_logger.Println("open mysql failed,", err)

@@ -66,7 +66,6 @@ func (n *NameNode) RunRpcServer() (net.Listener, error) {
 func (n *NameNode) Upload(req FileUploadMetaRequest, resp *FileUploadMetaResponse) error {
 	fileName := req.FileName
 	REPLICATE_NUM = len(n.datanodes) - 1
-	fmt.Println(REPLICATE_NUM)
 	chunk_num := req.FileSize / CHUNK_SIZE
 	fileid := db.InsertFile(fileName, chunk_num)
 	resp.FileID = fileid

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"net/rpc"
@@ -54,12 +55,22 @@ func (c *Client) Run() {
 			if len(elements) != 3 {
 				fmt.Println("miss data dir")
 			}
-			c.Download(elements[1], elements[2])
+			err := c.Download(elements[1], elements[2])
+			if err != nil {
+				fmt.Println(err)
+			}
 		} else if elements[0] == "put" {
-			if len(elements) != 2 {
+			if len(elements) <= 2 {
 				fmt.Println("miss data dir")
 			}
-			c.UploadFile(elements[1])
+			target := ""
+			if len(elements) > 2 {
+				target = elements[2]
+			}
+			err := c.UploadFile(elements[1], target)
+			if err != nil {
+				fmt.Println(err)
+			}
 		} else if elements[0] == "quit" {
 			break
 		} else {
@@ -102,8 +113,12 @@ func (c *Client) Close() {
 	c.nameNodeClient.Close()
 }
 
-func (c *Client) UploadFile(file string) error {
+func (c *Client) UploadFile(file string, target string) error {
+
 	_, fileName := filepath.Split(file)
+	if len(target) != 0 {
+		fileName = target
+	}
 	f, err := os.Open(file)
 	defer f.Close()
 	if err != nil {
@@ -147,7 +162,7 @@ func (c *Client) UploadFile(file string) error {
 	return err
 }
 
-func (c *Client) Download(filename string, dst string) {
+func (c *Client) Download(filename string, dst string) error {
 	// 获取元数据
 	req := FileDownloadMetaRequest{
 		FileName: filename,
@@ -159,12 +174,11 @@ func (c *Client) Download(filename string, dst string) {
 	c.nameNodeClient.Call("NameNode.Download", req, resp)
 	//fmt.Println(resp)
 	// 根据文件元数据，下载
-	newFilepath := filepath.Join(dst, filename)
-	f, err := os.Create(newFilepath)
+	f, err := os.Create(dst)
 	defer f.Close()
 	if err != nil {
 		ns_logger.Println("create file failed", err)
-		return
+		return err
 	}
 	for i, chunkId := range resp.ChunkId {
 		chunkReadRequest := ChunkReadRequest{
@@ -174,10 +188,10 @@ func (c *Client) Download(filename string, dst string) {
 		c.dataNodeClient[resp.DataServerAddrs[i]].Call("DataNode.Download", chunkReadRequest, chunkReadResponse)
 		decodeString, _ := hex.DecodeString(resp.MD5Code[i])
 		if !bytes.Equal(MD5Encode(chunkReadResponse.DATA), decodeString) {
-			ns_logger.Println("file checked failed", err)
-			return
+			ns_logger.Println("file checked failed")
+			return errors.New("file checked failed")
 		}
 		f.Write(chunkReadResponse.DATA)
 	}
-	return
+	return nil
 }
